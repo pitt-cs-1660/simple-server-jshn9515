@@ -16,16 +16,16 @@ app = FastAPI()
 ############################################
 
 
-@app.get("/")
+@app.get('/')
 async def read_root():
     """
     This is already working!!!! Welcome to the Cloud Computing!
     """
-    return {"message": "Welcome to the Cloud Computing!"}
+    return {'message': 'Welcome to the Cloud Computing!'}
 
 
 # POST ROUTE data is sent in the body of the request
-@app.post("/tasks/", response_model=TaskRead)
+@app.post('/tasks/', response_model=TaskRead)
 async def create_task(task_data: TaskCreate):
     """
     Create a new task
@@ -36,11 +36,26 @@ async def create_task(task_data: TaskCreate):
     Returns:
         TaskRead: The created task data
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    sql = 'INSERT INTO tasks (title, description, completed) VALUES (?, ?, ?)'
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            sql,
+            (task_data.title, task_data.description, int(task_data.completed)),
+        )
+        conn.commit()
+        task_id = cursor.lastrowid
+        assert task_id is not None
+        return TaskRead(
+            id=task_id,
+            title=task_data.title,
+            description=task_data.description,
+            completed=task_data.completed,
+        )
 
 
 # GET ROUTE to get all tasks
-@app.get("/tasks/", response_model=list[TaskRead])
+@app.get('/tasks/', response_model=list[TaskRead])
 async def get_tasks():
     """
     Get all tasks in the whole wide database
@@ -51,11 +66,22 @@ async def get_tasks():
     Returns:
         list[TaskRead]: A list of all tasks in the database
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    sql = 'SELECT id, title, description, completed FROM tasks'
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        tasks = [
+            TaskRead(
+                id=row[0], title=row[1], description=row[2], completed=bool(row[3])
+            )
+            for row in rows
+        ]
+        return tasks
 
 
 # UPDATE ROUTE data is sent in the body of the request and the task_id is in the URL
-@app.put("/tasks/{task_id}/", response_model=TaskRead)
+@app.put('/tasks/{task_id}/', response_model=TaskRead)
 async def update_task(task_id: int, task_data: TaskCreate):
     """
     Update a task by its ID
@@ -67,11 +93,26 @@ async def update_task(task_id: int, task_data: TaskCreate):
     Returns:
         TaskRead: The updated task data
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    sql = 'UPDATE tasks SET title = ?, description = ?, completed = ? WHERE id = ?'
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            sql,
+            (task_data.title, task_data.description, int(task_data.completed), task_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail='Task not found')
+        conn.commit()
+        return TaskRead(
+            id=task_id,
+            title=task_data.title,
+            description=task_data.description,
+            completed=task_data.completed,
+        )
 
 
 # DELETE ROUTE task_id is in the URL
-@app.delete("/tasks/{task_id}/")
+@app.delete('/tasks/{task_id}/')
 async def delete_task(task_id: int):
     """
     Delete a task by its ID
@@ -82,4 +123,11 @@ async def delete_task(task_id: int):
     Returns:
         dict: A message indicating that the task was deleted successfully
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    sql = 'DELETE FROM tasks WHERE id = ?'
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(sql, (task_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail='Task not found')
+        conn.commit()
+        return {'message': f'Task {task_id} deleted successfully'}
